@@ -66,21 +66,42 @@ class Blockchain {
         return new Promise(async (resolve, reject) => {
            // check the data is valid
            if (block) {
+                // Append the Block Time & hash
+                block.time = new Date().getTime().toString().slice(0,-3);
+                block.hash = SHA256(JSON.stringify(block)).toString();
+
                 if (this.chain.length > 0) {
                     let previousBlock = this.chain[this.chain.length-1];
                     block.height = previousBlock.height + 1;
                     block.previousBlockHash = previousBlock.hash;
-                } 
-                block.time = new Date().getTime().toString().slice(0,-3);
-                block.hash = SHA256(JSON.stringify(block)).toString();
-                this.chain.push(block);
-                this.height = this.chain.length;
-                console.log(block);
-            resolve(block);
+
+                    // validate chain before the block has been appended.
+                    // Given valid, append the block otherwise reject
+                    this.validateChain()
+                    .then((state) => state ? resolve (this._appendBlockOntoTheChain(block)) : reject ("Chain Invalid"))
+                    .catch((error) => reject("Chain Invalid"));
+
+                }  else {
+                    // append Genesis Block onto the chain
+                    this._appendGenesisBlock(block) ? resolve (block): reject("Failed to Append Genesis Block");
+            }   
            } else {
             reject(block);
            }
         });
+    }
+
+    _appendGenesisBlock(block) {
+        // Logic for Genesis Block if required
+        console.log("Appending Genesis Block");
+        return this._appendBlockOntoTheChain(block);
+    }
+
+    _appendBlockOntoTheChain(block) {
+        this.chain.push(block);
+        this.height = this.chain.length;
+        console.log(block);
+        return block;
     }
 
 
@@ -210,25 +231,60 @@ class Blockchain {
     validateChain() {
         let self = this;
         let errorLog = [];
-        let previousHash;
+        let previousHash = null;
         return new Promise(async (resolve, reject) => {
             if (this.chain.length > 0) {
-                this.chain.forEach((block) => {
-                    block.validate().then(() => {}
-                    ,(error) => errorLog.push(`Block Validation Failed: ${error}`))
-                    .catch(() => reject("Failed."));
-                    if (previousHash && block.hash !== previousHash) {
-                        errorLog.push(`Hash Not Matching: Previous Hash: ${previousHash} \n Block Hash ${block.hash}`);
-                    }
-                    previousHash = block?.previousBlockHash;
-                });
-                resolve(errorLog);
+                // for each block
+                Promise.all([
+                    this.chain.forEach((block) => {
+                        // determine if the body is altered.
+                        // validate the Block's hash and record any errors.
+                        block.validate()
+                            .then((state) => {
+                                if (!state) {
+                                    errorLog.push({
+                                        "Block's Hash" : block.hash,
+                                        "Error": "Block's Body has been altered."
+                                    });
+                                }
+                            }, (err) => errorLog.push({
+                                "Block's Hash": block.hash,
+                                "Error": `Block Validation Failed (${err})`
+                            })).catch((error) => errorLog.push({
+                                "Block's Hash": block.hash,
+                                "Error": `Failed Validating Block (${error})`
+                            }));
+                        
+                        // Compare the previous Block's hash.
+                        // comparing block;s hashes
+                        if (!this._comparePreviousBlockHash(block, previousHash)) {
+                            errorLog.push({
+                                "Block's Hash": block.hash,
+                                "Error": `Hash Not Matching: Previous Hash: ${previousHash} \n Block Hash ${block.hash}`});
+                        }
+
+                         // assign previousHash to block's hash
+                        previousHash = block?.hash;
+                    })
+                ]);
+                    
             } else {
-                reject("Failed Validation Check.")
+                // no block present on the chain.
+                errorLog.push({
+                    "Error": "No Block Present on the Chain."
+                });
             }
+            // return the error logs.
+            resolve(errorLog);
         });
     }
 
+    _comparePreviousBlockHash(block, previousBlockHash) {
+        return block.previousBlockHash === previousBlockHash;
+    }
+
 }
+
+
 
 module.exports.Blockchain = Blockchain;   

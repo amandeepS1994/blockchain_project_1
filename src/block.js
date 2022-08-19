@@ -44,7 +44,7 @@ class Block {
                 // Recalculate the hash of the Block
                 // Comparing if the hashes changed
                 // Returning the Block is not valid
-                (SHA256(extractedBlock).toString() === this.hash)? resolve (true): reject(false);
+                (SHA256(JSON.stringify(extractedBlock)).toString() === this.hash)? resolve (true): resolve(false);
             } else {
                 reject(false);
             }
@@ -67,16 +67,16 @@ class Block {
         // Resolve with the data if the object isn't the Genesis block
         let self = this;
         return new Promise((res, rej) => {
-            if (this.height === 0) {
-                rej("Error!");
-            } else {
+            try {
                 res(JSON.parse(hex2ascii(this.body)));
-            }
-             
+            } catch (error) {
+                rej(`Error: ${error}`);
+            } 
         });
 
     }
 
+    // extracts the blocks information.
     _extractBlockInformation(block) {
         return (block) ?
          {
